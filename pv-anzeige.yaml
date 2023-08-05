@@ -1,0 +1,406 @@
+substitutions:
+  grid_power: sensor.solarnet_power_grid
+  load_power: sensor.solarnet_power_load 
+  # carport_power: sensor.hoymiles_carport_01_real_power
+  carport01_power: sensor.carport01_power
+  carport02_power: sensor.carport02_power
+  roof_power: sensor.solarnet_power_photovoltaics
+  battery_power: sensor.solarnet_power_battery
+  battery_soc: sensor.byd_battery_box_premium_hv_state_of_charge
+  battery_charged_capacity: sensor.byd_battery_box_premium_hv_charged_capacity
+  battery_reserved_capacity: "1167"
+  whirlpool_power: sensor.whirlpool_power
+  boiler_power: sensor.boiler_power
+  max_pv_power: "9200"
+  
+
+esphome:
+  name: pv-anzeige
+  friendly_name: PV Anzeige
+#  on_boot:
+#    then:
+
+esp32:
+  board: esp32dev
+  framework:
+    type: arduino
+
+# Enable logging
+logger:
+
+# Enable Home Assistant API
+api:
+
+ota:
+  password: "1d7529442a8e5c2a526c694afb48dacf"
+
+wifi:
+  ssid: !secret wifi_ssid
+  password: !secret wifi_password
+  id: internal_wifi
+
+  manual_ip:
+    static_ip: 10.146.111.198
+    gateway: 10.146.111.1
+    subnet: 255.255.255.0
+
+captive_portal:
+
+globals:
+    - id: charge_left
+      type: float
+      restore_value: no
+    - id: time_left
+      type: float
+      restore_value: no
+
+color:
+  - id: my_text_color
+    red: 100%
+    green: 100%
+    blue: 100%
+  - id: my_text_color_dark
+    red: 0%
+    green: 0%
+    blue: 0%
+  - id: text_color_red
+    red: 100%
+    green: 0%
+    blue: 0%
+  - id: text_color_green
+    red: 0%
+    green: 100%
+    blue: 0%
+  - id: text_color_yellow
+    red: 100%
+    green: 100%
+    blue: 0%
+  - id: text_color_blue
+    red: 0%
+    green: 0%
+    blue: 100%
+
+font:
+  - file: "fonts/Montserrat-Medium.ttf"
+    id: my_font_big
+    size: 38
+  - file: "fonts/Montserrat-Bold.ttf"
+    id: my_font_small
+    size: 20
+  - file: "fonts/Montserrat-Bold.ttf"
+    id: my_font_small_small
+    size: 16
+  - file: "fonts/Montserrat-Bold.ttf"
+    id: my_font_small_small_small
+    size: 13    
+  - file: "fonts/Montserrat-Bold.ttf"
+    id: my_font_medium
+    size: 40
+  - file: "fonts/Montserrat-Bold.ttf"
+    id: my_font_medium_small
+    size: 33
+  - file: "fonts/dripicons-v2.ttf"
+    id: my_font_symbols
+    size: 64
+    glyphs: "~qGFWT]9"
+  - file: "fonts/dripicons-v2.ttf"
+    id: my_font_symbols_small
+    size: 40
+    glyphs: "~qGFWT]9Y"
+
+image:
+  - file: "images/background.jpeg"
+    id: my_background_photo
+    type: RGB24
+  - file: "images/solar-panel-roof.png"
+    id: pvpanelroof
+    type: RGB24
+    resize: 64x64  
+  - file: "images/solar-panel-test.png"
+    id: pvpanelcarport
+    type: RGB24
+    resize: 64x64
+  - file: "images/battery-status-full.png"
+    id: battery
+    type: TRANSPARENT_BINARY
+    resize: 64x64
+  - file: "images/battery-status-100.png"
+    id: battery_100
+    type: TRANSPARENT_BINARY
+    resize: 48x48
+  - file: "images/battery-status-80.png"
+    id: battery_80
+    type: TRANSPARENT_BINARY
+    resize: 48x48
+  - file: "images/battery-status-60.png"
+    id: battery_60
+    type: TRANSPARENT_BINARY
+    resize: 48x48
+  - file: "images/battery-status-40.png"
+    id: battery_40
+    type: TRANSPARENT_BINARY
+    resize: 48x48
+  - file: "images/battery-status-20.png"
+    id: battery_20
+    type: TRANSPARENT_BINARY
+    resize: 48x48
+  - file: "images/battery-status-0.png"
+    id: battery_0
+    type: TRANSPARENT_BINARY
+    resize: 48x48
+  - file: "images/grid.png"
+    id: grid
+    type: RGB24
+    resize: 58x58
+  - file: "images/house.png"
+    id: house
+    type: RGB24
+    resize: 56x56
+  - file: "images/whirlpool_on.png"
+    id: whirlpool_on
+    type: RGB24
+    resize: 25x25
+  - file: "images/whirlpool_off.png"
+    id: whirlpool_off
+    type: RGB24
+    resize: 25x25
+  - file: "images/boiler_on.png"
+    id: boiler_on
+    type: RGB24
+    resize: 25x25
+  - file: "images/boiler_off.png"
+    id: boiler_off
+    type: RGB24
+    resize: 25x25
+
+i2c:
+  sda: 25
+  scl: 26
+  scan: true
+  id: bus_i2c
+
+spi:
+ clk_pin: 18
+ mosi_pin: 23
+ miso_pin: 19
+ id: bus_spi
+
+touchscreen:
+  platform: xpt2046
+  id: touch
+  cs_pin: 14
+  interrupt_pin: 27 
+  update_interval: 50ms
+  report_interval: 1s
+  swap_x_y: false
+  on_touch:
+    - delay: 500ms
+    - light.turn_on: screen_backlight
+
+display:
+  - platform: ili9xxx
+    model: TFT 2.4
+    cs_pin: 5 
+    dc_pin: 4     
+    reset_pin: 22 
+    rotation: 180
+    id: screen
+    pages:
+      - id: homepage
+        lambda: |-                    
+          it.rectangle(0, 0, 240, 320, my_text_color);                                      
+
+          // Battery ICON (dynamic)
+          if (id(battery_soc).state >= 0 && id(battery_soc).state < 20)
+          {
+            it.image(12, 20, battery_0);
+          }
+          if (id(battery_soc).state >= 20 && id(battery_soc).state < 40)
+          {
+            it.image(12, 20, battery_20);
+          }
+          if (id(battery_soc).state >= 40 && id(battery_soc).state < 60)
+          {
+            it.image(12, 20, battery_40);
+          }
+          if (id(battery_soc).state >= 60 && id(battery_soc).state < 80)
+          {
+            it.image(12, 20, battery_60);
+          }
+          if (id(battery_soc).state >= 80 && id(battery_soc).state < 100)
+          {
+            it.image(12, 20, battery_80);
+          }
+          if (id(battery_soc).state >= 99)
+          {
+            it.image(12, 20, battery_100);
+          }
+          
+          // Battery Power
+          if (id(battery_power).state >= 0)
+          {
+            it.printf(75,23, my_font_big, text_color_red, "%.0f W", id(battery_power).state);
+          }
+          else
+          {
+            it.printf(75,23, my_font_big, text_color_green, "%.0f W", abs(id(battery_power).state));
+          }
+        
+          // Battery SOC %
+          it.printf(22, 68, my_font_small_small, my_text_color, "%02.0f%%", id(battery_soc).state);
+
+          // Battery Discharge Estimation of time left if we transfer more than 50W in/out
+          if (id(battery_power).state >= 0 && abs(id(battery_power).state) > 50 )
+          {                                     
+             it.printf(75, 68, my_font_small_small, my_text_color, "%.0f hrs left", (id(battery_charged_capacity).state - ${battery_reserved_capacity}) / id(battery_power).state );
+          }
+
+          // PV Power
+          it.image(10,85, pvpanelroof);
+          //it.printf(75,93, my_font_big, text_color_yellow, "%.0f W", (id(pvroof_power).state+id(pvcarport_power).state));
+          it.printf(75,93, my_font_big, text_color_yellow, "%.0f W", (id(pvcarport_power).state + id(pvroof_power).state));
+
+      
+
+          // PV Power Barchart
+          it.rectangle(75, 140, 200-75, 9);
+          // it.filled_rectangle(76, 141, (200-75-2)*((id(pvroof_power).state+id(pvcarport_power).state)/(${max_pv_power}/100)/100), 7, text_color_yellow);
+          it.filled_rectangle(76, 141, (200-75-2)*((id(pvcarport_power).state + id(pvroof_power).state)/(${max_pv_power}/100)/100), 7, text_color_yellow);
+
+          // PV Small Details
+          it.printf(76,152, my_font_small_small_small, text_color_yellow, "%.0f W + %.0f W", id(pvroof_power).state, id(pvcarport_power).state);
+          
+  
+          //ESP_LOGD("percent_of_max_pv", "%f", ((id(pvroof_power).state+id(pvcarport_power).state)/(${max_pv_power}/100)/100));
+          //ESP_LOGD("barchart_y_size", "%f", (200-75-2)*((id(pvroof_power).state+id(pvcarport_power).state)/(${max_pv_power}/100)/100));
+          
+
+          // GRID Power
+          it.image(10, 157, grid);
+          if (id(grid_power).state >= 0)
+          {
+            it.printf(75,167, my_font_big, text_color_red, "%.0f W", id(grid_power).state);
+          }
+          else
+          {
+            it.printf(75,167, my_font_big, text_color_green, "%.0f W", abs(id(grid_power).state));
+          }
+        
+          // House Power
+          it.image(10,225, house);
+          it.printf(75,232, my_font_big, text_color_blue, "%.0f W", abs(id(load_power).state));
+
+          // Whirlpool on/off
+          if (id(whirlpool_power).state > 500)
+          {
+             it.image(15, 285, whirlpool_on);             
+          }
+          else
+          {
+             it.image(15, 285, whirlpool_off);             
+          }
+
+          // Boiler on/off
+          if (id(boiler_power).state > 500)
+          {
+             it.image(50, 285, boiler_on);             
+          }
+          else
+          {
+             it.image(50, 285, boiler_off);             
+          }
+
+      
+          
+#it.image(0, 0, my_background_photo);
+
+output:
+  - platform: ledc
+    pin: 15
+    id: screen_backlight_pwm
+    inverted: true
+  - platform: ledc
+    pin: GPIO21
+    id: rtttl_out
+
+rtttl:
+  output: rtttl_out
+
+light:
+  - platform: monochromatic
+    output: screen_backlight_pwm
+    name: "Retroilluminazione display"
+    id: screen_backlight
+    restore_mode: ALWAYS_ON
+    #on_turn_on:
+      #- delay: 60s
+      #- light.turn_off: screen_backlight
+
+    
+sensor:
+    - platform: homeassistant
+      entity_id: ${battery_power}
+      id: battery_power
+    - platform: homeassistant
+      entity_id: ${roof_power}
+      id: pvroof_power
+      internal: true    
+      force_update: true  
+    - platform: homeassistant
+      entity_id: ${carport01_power}
+      id: carport01_power
+      internal: true    
+      force_update: true  
+    - platform: homeassistant
+      entity_id: ${carport02_power}
+      id: carport02_power
+      internal: true     
+      force_update: true
+    #- platform: homeassistant
+    #  entity_id: ${carport_power}
+    #  id: pvcarport_power
+    #  internal: true      
+    - platform: homeassistant
+      entity_id: ${battery_soc}
+      id: battery_soc
+    - platform: homeassistant
+      entity_id: ${grid_power}
+      id: grid_power
+    - platform: homeassistant
+      entity_id: ${load_power}
+      id: load_power      
+    - platform: homeassistant
+      entity_id: ${whirlpool_power}
+      id: whirlpool_power      
+    - platform: homeassistant
+      entity_id: ${boiler_power}
+      id: boiler_power      
+    - platform: homeassistant
+      entity_id: ${battery_charged_capacity}
+      id: battery_charged_capacity      
+    - platform: template      
+      id: pvcarport_power     
+      internal: true  
+      force_update: true
+      lambda: |-
+        if (isnan(id(carport01_power).raw_state) || isnan(id(carport02_power).raw_state))
+        {
+          return(0);
+        }
+        else
+        {
+          return (id(carport01_power).state + id(carport02_power).state);      
+        }
+    - platform: template  
+      id: pvtotal_power      
+      internal: true 
+      force_update: true
+      lambda: |-
+        if (isnan(id(carport01_power).raw_state) || isnan(id(carport02_power).raw_state))
+        {
+          return(id(pvroof_power).state);
+        }
+        else
+        {
+          return (id(carport01_power).state + id(carport02_power).state + id(pvroof_power).state);      
+        }      
