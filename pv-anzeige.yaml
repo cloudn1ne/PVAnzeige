@@ -4,14 +4,19 @@ substitutions:
   # carport_power: sensor.hoymiles_carport_01_real_power
   carport01_power: sensor.carport01_power
   carport02_power: sensor.carport02_power
+  balcony01_power: sensor.balcony01_power
   roof_power: sensor.solarnet_power_photovoltaics
   battery_power: sensor.solarnet_power_battery
   battery_soc: sensor.byd_battery_box_premium_hv_state_of_charge
   battery_charged_capacity: sensor.byd_battery_box_premium_hv_charged_capacity
-  battery_reserved_capacity: "1167"
+  battery_max_capacity: sensor.byd_battery_box_premium_hv_maximum_capacity
+  outdoor_temp: sensor.lorawan_outdoor_sensor_temp
+  # 20% reserved capacity for Emergency Power 1% = ca 220Wh
+  battery_reserved_capacity: "2200"
   whirlpool_power: sensor.whirlpool_power
+  whirlpool_temp: sensor.whirlpool_current_temperature
   boiler_power: sensor.boiler_power
-  max_pv_power: "9200"
+  max_pv_power: "10000"
   
 
 esphome:
@@ -32,7 +37,8 @@ logger:
 api:
 
 ota:
-  password: "1d7529442a8e5c2a526c694afb48dacf"
+   - platform: esphome
+     password: "xxxxx"
 
 wifi:
   ssid: !secret wifi_ssid
@@ -111,66 +117,66 @@ font:
 image:
   - file: "images/background.jpeg"
     id: my_background_photo
-    type: RGB24
+    type: RGB
   - file: "images/solar-panel-roof.png"
     id: pvpanelroof
-    type: RGB24
+    type: RGB
     resize: 64x64  
   - file: "images/solar-panel-test.png"
     id: pvpanelcarport
-    type: RGB24
+    type: RGB
     resize: 64x64
   - file: "images/battery-status-full.png"
     id: battery
-    type: TRANSPARENT_BINARY
-    resize: 64x64
+    type: RGB
+    resize: 64x64    
   - file: "images/battery-status-100.png"
     id: battery_100
-    type: TRANSPARENT_BINARY
+    type: RGB  
     resize: 48x48
   - file: "images/battery-status-80.png"
     id: battery_80
-    type: TRANSPARENT_BINARY
+    type: BINARY     
     resize: 48x48
   - file: "images/battery-status-60.png"
     id: battery_60
-    type: TRANSPARENT_BINARY
+    type: RGB 
     resize: 48x48
   - file: "images/battery-status-40.png"
     id: battery_40
-    type: TRANSPARENT_BINARY
+    type: RGB   
     resize: 48x48
   - file: "images/battery-status-20.png"
     id: battery_20
-    type: TRANSPARENT_BINARY
+    type: RGB     
     resize: 48x48
   - file: "images/battery-status-0.png"
     id: battery_0
-    type: TRANSPARENT_BINARY
+    type: RGB     
     resize: 48x48
   - file: "images/grid.png"
     id: grid
-    type: RGB24
+    type: RGB
     resize: 58x58
   - file: "images/house.png"
     id: house
-    type: RGB24
+    type: RGB
     resize: 56x56
   - file: "images/whirlpool_on.png"
     id: whirlpool_on
-    type: RGB24
+    type: RGB
     resize: 25x25
   - file: "images/whirlpool_off.png"
     id: whirlpool_off
-    type: RGB24
+    type: RGB
     resize: 25x25
   - file: "images/boiler_on.png"
     id: boiler_on
-    type: RGB24
+    type: RGB
     resize: 25x25
   - file: "images/boiler_off.png"
     id: boiler_off
-    type: RGB24
+    type: RGB
     resize: 25x25
 
 i2c:
@@ -190,15 +196,20 @@ touchscreen:
   id: touch
   cs_pin: 14
   interrupt_pin: 27 
-  update_interval: 50ms
-  report_interval: 1s
-  swap_x_y: false
+  update_interval: 50ms  
+  calibration:
+    x_min: 280
+    x_max: 3860
+    y_min: 340
+    y_max: 3860
   on_touch:
     - delay: 500ms
     - light.turn_on: screen_backlight
 
 display:
   - platform: ili9xxx
+    color_palette: 8BIT
+    invert_colors: false
     model: TFT 2.4
     cs_pin: 5 
     dc_pin: 4     
@@ -236,7 +247,7 @@ display:
             it.image(12, 20, battery_100);
           }
           
-          // Battery Power
+          // Battery Power IN/OUT currently
           if (id(battery_power).state >= 0)
           {
             it.printf(75,23, my_font_big, text_color_red, "%.0f W", id(battery_power).state);
@@ -246,13 +257,30 @@ display:
             it.printf(75,23, my_font_big, text_color_green, "%.0f W", abs(id(battery_power).state));
           }
         
+          // Show charged capacity
+          it.printf(150, 10, my_font_small_small_small, my_text_color, "%.0f Wh", id(battery_charged_capacity).state);
+
           // Battery SOC %
           it.printf(22, 68, my_font_small_small, my_text_color, "%02.0f%%", id(battery_soc).state);
 
-          // Battery Discharge Estimation of time left if we transfer more than 50W in/out
-          if (id(battery_power).state >= 0 && abs(id(battery_power).state) > 50 )
+          // Battery DISCHARGE Estimation of time left if we transfer more than 50W out
+          if (id(battery_power).state >= 0 && id(battery_power).state > 50 )
           {                                     
-             it.printf(75, 68, my_font_small_small, my_text_color, "%.0f hrs left", (id(battery_charged_capacity).state - ${battery_reserved_capacity}) / id(battery_power).state );
+             it.printf(75, 68, my_font_small_small, my_text_color, "%.0f hrs until empty", (id(battery_charged_capacity).state - ${battery_reserved_capacity}) / id(battery_power).state );
+          }
+
+          // Battery CHARGE Estimation of time left if we transfer more than 50W in
+          if (id(battery_power).state < 100 && id(battery_power).state < -50 )          
+          {                                     
+             if (abs((id(battery_max_capacity).state - id(battery_charged_capacity).state ) / id(battery_power).state) <= 2)
+             { // less than an hour until full
+              it.printf(75, 68, my_font_small_small, my_text_color, "%.0f mins until full", abs((id(battery_max_capacity).state - id(battery_charged_capacity).state ) / id(battery_power).state)*60 );
+             }
+             else
+             { // more than an hour until full
+              it.printf(75, 68, my_font_small_small, my_text_color, "%.0f hrs until full", abs((id(battery_max_capacity).state - id(battery_charged_capacity).state ) / id(battery_power).state) );
+             }
+
           }
 
           // PV Power
@@ -290,26 +318,33 @@ display:
           it.image(10,225, house);
           it.printf(75,232, my_font_big, text_color_blue, "%.0f W", abs(id(load_power).state));
 
-          // Whirlpool on/off
-          if (id(whirlpool_power).state > 500)
-          {
-             it.image(15, 285, whirlpool_on);             
-          }
-          else
-          {
-             it.image(15, 285, whirlpool_off);             
-          }
 
           // Boiler on/off
           if (id(boiler_power).state > 500)
           {
-             it.image(50, 285, boiler_on);             
+             it.image(15, 285, boiler_on);             
           }
           else
           {
-             it.image(50, 285, boiler_off);             
+             it.image(15, 285, boiler_off);             
           }
 
+
+          // Whirlpool on/off
+          if (id(whirlpool_power).state > 500)
+          {
+             it.image(50, 285, whirlpool_on);             
+             it.printf(80,285, my_font_small_small, text_color_red, "%.0f °C", id(whirlpool_temp).state);          
+          }
+          else
+          {
+             it.image(50, 285, whirlpool_off);             
+             it.printf(80,285, my_font_small_small, my_text_color, "%.0f °C", id(whirlpool_temp).state);          
+          }          
+
+          // Outdoor Temp
+          it.printf(150,285, my_font_small_small, my_text_color, "Out: %.0f °C", id(outdoor_temp).state);          
+       
       
           
 #it.image(0, 0, my_background_photo);
@@ -339,6 +374,9 @@ light:
     
 sensor:
     - platform: homeassistant
+      entity_id: ${outdoor_temp}
+      id: outdoor_temp
+    - platform: homeassistant
       entity_id: ${battery_power}
       id: battery_power
     - platform: homeassistant
@@ -356,13 +394,21 @@ sensor:
       id: carport02_power
       internal: true     
       force_update: true
+    - platform: homeassistant
+      entity_id: ${balcony01_power}
+      id: balcony01_power
+      internal: true     
+      force_update: true
     #- platform: homeassistant
     #  entity_id: ${carport_power}
     #  id: pvcarport_power
-    #  internal: true      
+    #  internal: true
     - platform: homeassistant
       entity_id: ${battery_soc}
-      id: battery_soc
+      id: battery_soc      
+    - platform: homeassistant
+      entity_id: ${battery_max_capacity}
+      id: battery_max_capacity
     - platform: homeassistant
       entity_id: ${grid_power}
       id: grid_power
@@ -372,6 +418,9 @@ sensor:
     - platform: homeassistant
       entity_id: ${whirlpool_power}
       id: whirlpool_power      
+    - platform: homeassistant
+      entity_id: ${whirlpool_temp}
+      id: whirlpool_temp          
     - platform: homeassistant
       entity_id: ${boiler_power}
       id: boiler_power      
@@ -383,13 +432,13 @@ sensor:
       internal: true  
       force_update: true
       lambda: |-
-        if (isnan(id(carport01_power).raw_state) || isnan(id(carport02_power).raw_state))
+        if (isnan(id(carport01_power).raw_state) || isnan(id(carport02_power).raw_state) || isnan(id(balcony01_power).raw_state))
         {
           return(0);
         }
         else
         {
-          return (id(carport01_power).state + id(carport02_power).state);      
+          return (id(carport01_power).state + id(carport02_power).state + id(balcony01_power).state );      
         }
     - platform: template  
       id: pvtotal_power      
