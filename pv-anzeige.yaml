@@ -12,10 +12,11 @@ substitutions:
   battery_max_capacity: sensor.byd_battery_box_premium_hv_maximum_capacity
   outdoor_temp: sensor.lorawan_outdoor_sensor_temp
   # 20% reserved capacity for Emergency Power 1% = ca 220Wh
-  battery_reserved_capacity: "2200"
+  battery_reserved_capacity: "4400"
   whirlpool_power: sensor.whirlpool_power
   whirlpool_temp: sensor.whirlpool_current_temperature
   boiler_power: sensor.boiler_power
+  boiler_temp: sensor.boiler_s1_boiler_temp
   max_pv_power: "10000"
   
 
@@ -38,7 +39,7 @@ api:
 
 ota:
    - platform: esphome
-     password: "xxxxx"
+     password: "1d7529442a8e5c2a526c694afb48dacf"
 
 wifi:
   ssid: !secret wifi_ssid
@@ -322,28 +323,30 @@ display:
           // Boiler on/off
           if (id(boiler_power).state > 500)
           {
-             it.image(15, 285, boiler_on);             
+             it.image(15, 285, boiler_on);                         
+             it.printf(45, 285, my_font_small_small, text_color_red, "%.0f °C", id(boiler_temp).state);          
           }
           else
           {
              it.image(15, 285, boiler_off);             
+             it.printf(45, 285, my_font_small_small, my_text_color, "%.0f °C", id(boiler_temp).state);          
           }
 
 
           // Whirlpool on/off
           if (id(whirlpool_power).state > 500)
           {
-             it.image(50, 285, whirlpool_on);             
-             it.printf(80,285, my_font_small_small, text_color_red, "%.0f °C", id(whirlpool_temp).state);          
+             it.image(100, 285, whirlpool_on);             
+             it.printf(130,285, my_font_small_small, text_color_red, "%.0f °C", id(whirlpool_temp).state);          
           }
           else
           {
-             it.image(50, 285, whirlpool_off);             
-             it.printf(80,285, my_font_small_small, my_text_color, "%.0f °C", id(whirlpool_temp).state);          
+             it.image(100, 285, whirlpool_off);             
+             it.printf(130,285, my_font_small_small, my_text_color, "%.0f °C", id(whirlpool_temp).state);          
           }          
 
           // Outdoor Temp
-          it.printf(150,285, my_font_small_small, my_text_color, "Out: %.0f °C", id(outdoor_temp).state);          
+          it.printf(190,285, my_font_small_small, my_text_color, "%.0f °C", id(outdoor_temp).state);          
        
       
           
@@ -424,6 +427,9 @@ sensor:
     - platform: homeassistant
       entity_id: ${boiler_power}
       id: boiler_power      
+    - platform: homeassistant
+      entity_id: ${boiler_temp}
+      id: boiler_temp          
     - platform: homeassistant
       entity_id: ${battery_charged_capacity}
       id: battery_charged_capacity      
